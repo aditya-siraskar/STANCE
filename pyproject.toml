@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stance"
+version = "0.1.0"
+description = "SEC Text and Accounting Numeric Checking Engine"
+requires-python = ">=3.10"
+dependencies = [
+    "sqlalchemy>=2.0",
+    "psycopg[binary]>=3.1",
+    "pgvector>=0.3.0",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "requests>=2.31",
+    "beautifulsoup4>=4.12",
+    "lxml>=5.1",
+]
+
+[project.optional-dependencies]
+# Heavy ML deps, only needed on Kaggle for the embedding/rerank/agent
+# notebooks (Phases 2 and 4) — kept out of core so contract/numeric/parsing
+# tests install and run in seconds, without pulling torch.
+retrieval = ["sentence-transformers>=3.0"]
+agents = ["langgraph>=0.2", "litellm>=1.40"]
+dev = ["pytest>=8.0", "ruff>=0.5", "hypothesis>=6.100"]
+
+[tool.setuptools.packages.find]
+include = ["stance*"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+# FURB157 wants Decimal(10) instead of Decimal("10") — but the string form
+# avoids float-precision surprises and is the documented best practice for
+# money math, so it's deliberate here, not an oversight.
+ignore = ["FURB157"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
