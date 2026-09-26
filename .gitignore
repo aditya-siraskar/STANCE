@@ -7,3 +7,4 @@ __pycache__/
 .ruff_cache/
 raw/
 .ipynb_checkpoints/
+eval/last_run_results.json

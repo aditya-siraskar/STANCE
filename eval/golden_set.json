@@ -1,0 +1,26 @@
+[
+  {"id": "g1", "question": "What was Apple's FY24 revenue?", "kind": "numeric", "expected_concept": "revenue", "expected_cik": "0000320193", "expected_fiscal_year": 2024},
+  {"id": "g2", "question": "What was Microsoft's FY24 revenue?", "kind": "numeric", "expected_concept": "revenue", "expected_cik": "0000789019", "expected_fiscal_year": 2024},
+  {"id": "g3", "question": "What was Apple's FY24 net income?", "kind": "numeric", "expected_concept": "net_income", "expected_cik": "0000320193", "expected_fiscal_year": 2024},
+  {"id": "g4", "question": "What was Apple's revenue growth from FY23 to FY24?", "kind": "numeric", "expected_concept": "revenue", "expected_operation": "growth_rate"},
+  {"id": "g5", "question": "What was JPMorgan's FY24 total assets?", "kind": "numeric", "expected_concept": "total_assets", "expected_cik": "0000019617"},
+  {"id": "g6", "question": "What was Exxon's FY24 net income?", "kind": "numeric", "expected_concept": "net_income", "expected_cik": "0000034088"},
+  {"id": "g7", "question": "What was Pfizer's FY24 diluted EPS?", "kind": "numeric", "expected_concept": "eps_diluted", "expected_cik": "0000078003"},
+  {"id": "g8", "question": "What was Apple's FY23 revenue?", "kind": "numeric", "expected_concept": "revenue", "expected_fiscal_year": 2023},
+
+  {"id": "g9", "question": "What are Apple's main risk factors?", "kind": "narrative", "expected_item_code": "1A"},
+  {"id": "g10", "question": "What does Microsoft discuss in its MD&A about revenue drivers?", "kind": "narrative", "expected_item_code": "7"},
+  {"id": "g11", "question": "What market risks does JPMorgan disclose?", "kind": "narrative", "expected_item_code": "7A"},
+  {"id": "g12", "question": "What are Exxon's supply chain and commodity price risks?", "kind": "narrative", "expected_item_code": "1A"},
+
+  {"id": "g13", "question": "Compare Apple and Microsoft FY24 revenue", "kind": "comparison"},
+  {"id": "g14", "question": "Compare Apple and Microsoft's risk factors", "kind": "comparison"},
+
+  {"id": "g15", "question": "How did Apple's revenue change from FY23 to FY24?", "kind": "trend"},
+  {"id": "g16", "question": "How has Pfizer's net income trended from FY23 to FY24?", "kind": "trend"},
+
+  {"id": "g17", "question": "What was Apple's FY21 revenue?", "kind": "unanswerable", "note": "FY21 is outside the ingested corpus (FY23-FY24 only) — correct answer is abstention/FactNotFound, not a guess"},
+  {"id": "g18", "question": "What is Apple's projected FY26 revenue?", "kind": "unanswerable", "note": "no filing discloses future projections"},
+  {"id": "g19", "question": "What was Tesla's FY24 revenue?", "kind": "unanswerable", "note": "Tesla is not in the watchlist"},
+  {"id": "g20", "question": "What is Apple's current stock price?", "kind": "unanswerable", "note": "market price is out of scope for this corpus (10-K/10-Q text + XBRL facts only)"}
+]

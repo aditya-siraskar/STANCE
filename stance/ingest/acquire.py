@@ -45,6 +45,39 @@ def fetch_company_facts(cik: str) -> dict:
     return _rate_limited_get(url).json()
 
 
+def find_10k_accessions(submissions: dict, target_fiscal_years: list[int]) -> list[dict]:
+    """Filter a company's `submissions` JSON down to its 10-K filings whose
+    report period falls in the target fiscal years. Uses reportDate (the
+    filing's period-of-report) rather than filingDate, since a FY24 10-K is
+    typically filed in FY25 — matching on filingDate would miss it.
+    """
+    recent = submissions.get("filings", {}).get("recent", {})
+    forms = recent.get("form", [])
+    accessions = recent.get("accessionNumber", [])
+    report_dates = recent.get("reportDate", [])
+    filing_dates = recent.get("filingDate", [])
+    primary_docs = recent.get("primaryDocument", [])
+
+    results = []
+    for i, form in enumerate(forms):
+        if form != "10-K":
+            continue
+        report_date = report_dates[i]
+        fiscal_year = int(report_date[:4])
+        if fiscal_year not in target_fiscal_years:
+            continue
+        results.append(
+            {
+                "accession_no": accessions[i],
+                "form_type": form,
+                "fiscal_year": fiscal_year,
+                "filing_date": filing_dates[i],
+                "primary_doc": primary_docs[i],
+            }
+        )
+    return results
+
+
 def fetch_filing_document(cik: str, accession_no: str, primary_doc: str) -> str:
     """Raw iXBRL HTML for one filing's primary document, cached to disk so a
     re-run doesn't re-hit EDGAR."""
