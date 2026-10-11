@@ -85,11 +85,7 @@ st.markdown(
         background: radial-gradient(circle at 85% -10%, rgba(179,207,229,0.25) 0%, transparent 55%);
         pointer-events: none;
     }
-    .stance-hero h1, #stance-title {
-        margin: 0; font-size: 1.85rem; letter-spacing: -0.01em;
-        color: #B3CFE5 !important; position: relative;
-    }
-    .stance-hero p { margin: 0.4rem 0 0 0; color: var(--blue-light); font-size: 0.95rem; position: relative; }
+    .stance-hero p { margin: 0; color: var(--blue-light); font-size: 0.95rem; position: relative; }
 
     .stance-rule {
         border-left: 3px solid var(--blue-mid); padding: 0.65rem 0.95rem;
@@ -256,10 +252,14 @@ st.markdown(
 )
 
 st.markdown(
+    '<h1 style="margin:0 0 0.6rem 0; font-size:2rem;">STANCE</h1>',
+    unsafe_allow_html=True,
+)
+
+st.markdown(
     """
     <div class="stance-hero">
-      <h1 id="stance-title" style="color:#B3CFE5 !important; margin:0; font-size:1.75rem;">STANCE</h1>
-      <p style="color:#B3CFE5 !important; margin:0.4rem 0 0 0; font-size:0.95rem;">
+      <p style="color:#B3CFE5 !important; margin:0; font-size:0.95rem;">
       <b>S</b>EC <b>T</b>ext <b>a</b>nd Accounting <b>N</b>umeric <b>C</b>hecking <b>E</b>ngine
       &mdash; an agentic research copilot over SEC filings.</p>
     </div>
