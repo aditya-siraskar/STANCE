@@ -29,6 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from pipeline_viz import render_pipeline
+from ui_components import kpi_row
 
 from stance.config import settings
 
@@ -41,85 +42,135 @@ st.set_page_config(page_title="STANCE", layout="wide")
 st.markdown(
     """
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap');
+
     :root {
         --navy: #0A1931;
         --blue-dark: #1A3D63;
         --blue-mid: #4A7FA7;
         --blue-light: #B3CFE5;
         --bg: #F6FAFD;
+        --glass: rgba(255,255,255,0.68);
+        --glass-border: rgba(26,61,99,0.14);
+        --shadow-soft: 0 2px 10px rgba(10,25,49,0.05), 0 8px 28px rgba(10,25,49,0.06);
+        --shadow-lift: 0 4px 16px rgba(10,25,49,0.08), 0 14px 36px rgba(10,25,49,0.10);
+        --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
     }
-    .stApp { background: var(--bg); }
-    h1, h2, h3, h4 { color: var(--navy) !important; }
+
+    html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+
+    .stApp {
+        background:
+            radial-gradient(circle at 10% 0%, rgba(179,207,229,0.35) 0%, transparent 45%),
+            radial-gradient(circle at 90% 10%, rgba(74,127,167,0.12) 0%, transparent 40%),
+            var(--bg);
+    }
+    h1, h2, h3, h4 { color: var(--navy) !important; font-weight: 700 !important; }
     p, li, span, label { color: var(--navy); }
 
+    ::-webkit-scrollbar { width: 9px; height: 9px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--blue-light); border-radius: 999px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--blue-mid); }
+
     .stance-hero {
-        padding: 1.5rem 1.75rem; border-radius: 14px; margin-bottom: 1.25rem;
-        background: linear-gradient(120deg, var(--navy) 0%, var(--blue-dark) 100%);
-        color: var(--bg); box-shadow: 0 6px 18px rgba(10,25,49,0.25);
+        padding: 1.6rem 1.9rem; border-radius: 18px; margin-bottom: 1.25rem;
+        background: linear-gradient(135deg, var(--navy) 0%, var(--blue-dark) 70%, var(--blue-mid) 140%);
+        color: var(--bg); box-shadow: var(--shadow-lift);
+        border: 1px solid rgba(255,255,255,0.08);
+        position: relative; overflow: hidden;
     }
-    .stance-hero h1 { margin: 0; font-size: 1.75rem; color: var(--bg) !important; }
-    .stance-hero p { margin: 0.4rem 0 0 0; color: var(--blue-light); font-size: 0.95rem; }
+    .stance-hero::after {
+        content: ''; position: absolute; inset: 0;
+        background: radial-gradient(circle at 85% -10%, rgba(179,207,229,0.25) 0%, transparent 55%);
+        pointer-events: none;
+    }
+    .stance-hero h1 {
+        margin: 0; font-size: 1.85rem; letter-spacing: -0.01em;
+        color: var(--bg) !important; position: relative;
+    }
+    .stance-hero p { margin: 0.4rem 0 0 0; color: var(--blue-light); font-size: 0.95rem; position: relative; }
 
     .stance-rule {
-        border-left: 4px solid var(--blue-mid); padding: 0.6rem 0.9rem;
-        background: rgba(74,127,167,0.08); border-radius: 0 8px 8px 0; font-size: 0.86rem;
+        border-left: 3px solid var(--blue-mid); padding: 0.65rem 0.95rem;
+        background: var(--glass); backdrop-filter: blur(10px);
+        border-radius: 0 10px 10px 0; font-size: 0.85rem;
+        box-shadow: var(--shadow-soft);
+    }
+
+    /* ---- base glass-card look, applied directly to every card-like
+       element below rather than via a combinable class, so no Python HTML
+       generation needs to pass two class names ---- */
+    .glass-card, .pipeline-wrap, .answer-card, .kpi-tile {
+        background: var(--glass); backdrop-filter: blur(14px) saturate(140%);
+        border: 1px solid var(--glass-border); border-radius: 16px;
+        box-shadow: var(--shadow-soft);
+        transition: box-shadow 0.25s ease, transform 0.25s ease;
     }
 
     /* ---- pipeline diagram ---- */
     .pipeline-wrap {
-        background: white; border-radius: 16px; padding: 1.5rem 1.25rem 1.25rem;
-        margin-bottom: 1rem; box-shadow: 0 2px 14px rgba(10,25,49,0.08);
-        border: 1px solid var(--blue-light);
+        padding: 1.6rem 1.3rem 1.3rem; margin-bottom: 1rem;
     }
     .pipeline-title {
-        font-size: 0.78rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
-        color: var(--blue-mid); margin-bottom: 0.9rem;
+        font-size: 0.74rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+        color: var(--blue-mid); margin-bottom: 1rem;
     }
     .pipeline { display: flex; align-items: center; gap: 0; flex-wrap: wrap; }
     .stage {
-        flex: 1 1 120px; min-width: 110px; border-radius: 12px; padding: 0.7rem 0.5rem;
+        flex: 1 1 120px; min-width: 110px; border-radius: 13px; padding: 0.75rem 0.5rem;
         text-align: center; position: relative; z-index: 1;
+        transition: transform 0.25s ease, box-shadow 0.25s ease;
     }
     .stage-num {
         width: 24px; height: 24px; line-height: 24px; border-radius: 50%;
         font-size: 0.72rem; font-weight: 700; margin: 0 auto 0.4rem;
+        font-family: var(--mono);
         background: rgba(255,255,255,0.25); color: inherit;
     }
     .stage.pending .stage-num { background: rgba(74,127,167,0.18); color: var(--blue-mid); }
     .stage-label { font-weight: 700; font-size: 0.82rem; }
     .stage-sub { font-size: 0.65rem; opacity: 0.85; margin-top: 0.15rem; }
 
-    .stage.pending { background: #eef4f9; color: var(--blue-mid); opacity: 0.6; }
+    .stage.pending { background: rgba(238,244,249,0.7); color: var(--blue-mid); opacity: 0.65; }
     .stage.pending .stage-sub { color: var(--blue-mid); }
 
     .stage.active {
-        background: var(--blue-mid); color: white; transform: scale(1.06);
+        background: linear-gradient(135deg, var(--blue-mid), var(--blue-dark));
+        color: white; transform: scale(1.07);
+        box-shadow: 0 6px 20px rgba(74,127,167,0.35);
         animation: pulseGlow 1.1s ease-in-out infinite;
     }
     .stage.active .stage-sub { color: var(--blue-light); }
 
     .stage.done {
         background: var(--blue-dark); color: white;
+        box-shadow: 0 3px 10px rgba(26,61,99,0.25);
         animation: popIn 0.35s ease-out;
     }
     .stage.done .stage-sub { color: var(--blue-light); }
 
     .stage.warn {
         background: var(--navy); color: white;
+        box-shadow: 0 3px 10px rgba(10,25,49,0.3);
         animation: popIn 0.35s ease-out;
     }
     .stage.warn .stage-sub { color: var(--blue-light); }
 
-    .connector { flex: 0 0 28px; height: 3px; background: var(--blue-light); margin: 0 -2px; align-self: center; margin-top: -22px; border-radius: 2px; }
+    .connector { flex: 0 0 28px; height: 3px; background: var(--blue-light); margin: 0 -2px; align-self: center; margin-top: -22px; border-radius: 2px; transition: background 0.3s ease; }
     .connector.done { background: var(--blue-dark); }
 
     @keyframes pulseGlow {
-        0%, 100% { box-shadow: 0 0 0 0 rgba(74,127,167,0.55); }
-        50% { box-shadow: 0 0 0 9px rgba(74,127,167,0); }
+        0%, 100% { box-shadow: 0 0 0 0 rgba(74,127,167,0.55), 0 6px 20px rgba(74,127,167,0.35); }
+        50% { box-shadow: 0 0 0 10px rgba(74,127,167,0), 0 6px 20px rgba(74,127,167,0.35); }
     }
     @keyframes popIn {
         0% { transform: scale(0.88); opacity: 0.5; }
         100% { transform: scale(1); opacity: 1; }
+    }
+    @keyframes breathe {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(26,61,99,0.35); }
+        50% { box-shadow: 0 0 0 5px rgba(26,61,99,0); }
     }
 
     .substage-row { margin-top: 0.5rem; font-size: 0.68rem; }
@@ -130,28 +181,75 @@ st.markdown(
     .pipeline-status { font-size: 0.82rem; color: var(--blue-mid); font-weight: 600; margin-top: 0.6rem; min-height: 1.2rem; }
 
     /* ---- badges / cards ---- */
-    .badge { display:inline-block; padding: 0.2rem 0.7rem; border-radius: 999px; font-size: 0.78rem; font-weight: 700; }
+    .badge {
+        display:inline-block; padding: 0.22rem 0.75rem; border-radius: 999px;
+        font-size: 0.76rem; font-weight: 700; letter-spacing: 0.03em;
+    }
     .badge-fast { background: var(--blue-light); color: var(--navy); }
     .badge-full { background: var(--blue-mid); color: white; }
     .answer-card {
-        background: white; border: 1px solid var(--blue-light); border-radius: 12px;
-        padding: 1.1rem 1.3rem; margin-top: 0.8rem; box-shadow: 0 2px 10px rgba(10,25,49,0.06);
+        padding: 1.2rem 1.4rem; margin-top: 0.8rem;
+        font-variant-numeric: tabular-nums; font-size: 1.02rem; line-height: 1.6;
+    }
+    .answer-card:hover { box-shadow: var(--shadow-lift); transform: translateY(-1px); }
+
+    /* ---- KPI tiles ---- */
+    .kpi-row {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 0.75rem; margin: 0.6rem 0 1rem;
+    }
+    .kpi-tile {
+        padding: 0.9rem 1.1rem; border-radius: 14px;
+        border-left: 3px solid var(--blue-mid);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .kpi-tile:hover { transform: translateY(-2px); box-shadow: var(--shadow-lift); }
+    .kpi-accent-dark { border-left-color: var(--blue-dark); }
+    .kpi-label {
+        font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.05em; color: var(--blue-mid); margin-bottom: 0.3rem;
+    }
+    .kpi-value {
+        font-family: var(--mono); font-size: 1.65rem; font-weight: 700;
+        color: var(--navy); font-variant-numeric: tabular-nums;
     }
 
     /* ---- status checklist (sidebar) ---- */
+    .status-row {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 0.4rem 0.1rem;
+    }
     .status-dot {
         display: inline-block; width: 8px; height: 8px; border-radius: 50%;
-        margin-right: 0.45rem; vertical-align: middle;
+        margin-right: 0.5rem; vertical-align: middle; flex-shrink: 0;
     }
-    .status-dot.ok { background: var(--blue-dark); }
+    .status-dot.ok { background: var(--blue-dark); animation: breathe 2.2s ease-in-out infinite; }
     .status-dot.pending { background: var(--blue-light); border: 1px solid var(--blue-mid); }
-    .status-label { font-size: 0.85rem; }
+    .status-label { font-size: 0.85rem; flex: 1; }
     .status-text {
-        float: right; font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
-        letter-spacing: 0.04em;
+        font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.04em; font-family: var(--mono);
     }
     .status-text.ok { color: var(--blue-dark); }
     .status-text.pending { color: var(--blue-mid); opacity: 0.7; }
+
+    /* ---- progressive enhancement of native Streamlit widgets ----
+       These target Streamlit's documented, long-stable CSS hooks. If a
+       future Streamlit version renames them, these rules simply stop
+       matching and the native default styling shows instead - no
+       breakage either way. */
+    .stButton > button {
+        border-radius: 10px !important; border: 1px solid var(--glass-border) !important;
+        transition: transform 0.15s ease, box-shadow 0.15s ease !important;
+        font-weight: 600 !important;
+    }
+    .stButton > button:hover {
+        transform: translateY(-1px); box-shadow: var(--shadow-soft);
+        border-color: var(--blue-mid) !important;
+    }
+    [data-testid="stDataFrame"] {
+        border-radius: 12px; overflow: hidden; box-shadow: var(--shadow-soft);
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -268,9 +366,11 @@ with st.sidebar:
         status_cls = "ok" if ok else "pending"
         status_text = "done" if ok else "pending"
         st.markdown(
+            f'<div class="status-row">'
             f'<span class="status-dot {status_cls}"></span>'
-            f'<span class="status-label">{label}</span> '
-            f'<span class="status-text {status_cls}">{status_text}</span>',
+            f'<span class="status-label">{label}</span>'
+            f'<span class="status-text {status_cls}">{status_text}</span>'
+            f'</div>',
             unsafe_allow_html=True,
         )
     if not corpus_ready:
@@ -425,11 +525,15 @@ with tab_verify:
         if not report:
             st.info("This question stopped before verification (clarification needed).")
         else:
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Figures checked", report["figures_checked"])
-            c2.metric("Figures traced", report["figures_traced"])
-            c3.metric("Figures rejected", report["figures_rejected"])
-            c4.metric("Citation coverage", f"{report['citation_coverage']:.0%}")
+            st.markdown(
+                kpi_row([
+                    ("Figures checked", str(report["figures_checked"])),
+                    ("Figures traced", str(report["figures_traced"])),
+                    ("Figures rejected", str(report["figures_rejected"])),
+                    ("Citation coverage", f"{report['citation_coverage']:.0%}"),
+                ]),
+                unsafe_allow_html=True,
+            )
 
             if report["rejected_details"]:
                 st.markdown("#### Rejected figures")
@@ -478,13 +582,16 @@ with tab_eval:
         ]
         avg_coverage = sum(coverages) / len(coverages) if coverages else None
 
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Questions run", len(results))
-        c2.metric(
-            "Abstention accuracy",
-            f"{correctly_abstained}/{len(unanswerable)}" if unanswerable else "n/a",
+        st.markdown(
+            kpi_row([
+                ("Questions run", str(len(results))),
+                ("Abstention accuracy",
+                 f"{correctly_abstained}/{len(unanswerable)}" if unanswerable else "n/a"),
+                ("Avg citation coverage",
+                 f"{avg_coverage:.0%}" if avg_coverage is not None else "n/a"),
+            ]),
+            unsafe_allow_html=True,
         )
-        c3.metric("Avg citation coverage", f"{avg_coverage:.0%}" if avg_coverage is not None else "n/a")
 
         st.dataframe(
             [
