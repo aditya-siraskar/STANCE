@@ -85,9 +85,9 @@ st.markdown(
         background: radial-gradient(circle at 85% -10%, rgba(179,207,229,0.25) 0%, transparent 55%);
         pointer-events: none;
     }
-    .stance-hero h1 {
+    .stance-hero h1, #stance-title {
         margin: 0; font-size: 1.85rem; letter-spacing: -0.01em;
-        color: var(--bg) !important; position: relative;
+        color: #FFFFFF !important; position: relative;
     }
     .stance-hero p { margin: 0.4rem 0 0 0; color: var(--blue-light); font-size: 0.95rem; position: relative; }
 
@@ -258,7 +258,7 @@ st.markdown(
 st.markdown(
     """
     <div class="stance-hero">
-      <h1 style="color:#F6FAFD !important; margin:0; font-size:1.75rem;">STANCE</h1>
+      <h1 id="stance-title" style="color:#FFFFFF !important; margin:0; font-size:1.75rem;">STANCE</h1>
       <p style="color:#B3CFE5 !important; margin:0.4rem 0 0 0; font-size:0.95rem;">
       <b>S</b>EC <b>T</b>ext <b>a</b>nd Accounting <b>N</b>umeric <b>C</b>hecking <b>E</b>ngine
       &mdash; an agentic research copilot over SEC filings.</p>
