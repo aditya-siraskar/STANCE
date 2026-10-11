@@ -48,24 +48,23 @@ def fetch_company_facts(cik: str) -> dict:
     return _rate_limited_get(url).json()
 
 
-def find_10k_accessions(submissions: dict, target_fiscal_years: list[int]) -> list[dict]:
-    """Filter a company's `submissions` JSON down to its 10-K filings whose
-    report period falls in the target fiscal years. Uses reportDate (the
-    filing's period-of-report) rather than filingDate, since a FY24 10-K is
-    typically filed in FY25 — matching on filingDate would miss it.
-    """
-    recent = submissions.get("filings", {}).get("recent", {})
-    forms = recent.get("form", [])
-    accessions = recent.get("accessionNumber", [])
-    report_dates = recent.get("reportDate", [])
-    filing_dates = recent.get("filingDate", [])
-    primary_docs = recent.get("primaryDocument", [])
+def _scan_10k_block(block: dict, target_fiscal_years: list[int]) -> list[dict]:
+    """Extracts matching 10-K entries from one filings block — either
+    `submissions['filings']['recent']` or a paginated older-filings page,
+    which share the same flat array-of-fields shape."""
+    forms = block.get("form", [])
+    accessions = block.get("accessionNumber", [])
+    report_dates = block.get("reportDate", [])
+    filing_dates = block.get("filingDate", [])
+    primary_docs = block.get("primaryDocument", [])
 
     results = []
     for i, form in enumerate(forms):
         if form != "10-K":
             continue
         report_date = report_dates[i]
+        if not report_date:  # a handful of old filings have an empty reportDate
+            continue
         fiscal_year = int(report_date[:4])
         if fiscal_year not in target_fiscal_years:
             continue
@@ -78,6 +77,43 @@ def find_10k_accessions(submissions: dict, target_fiscal_years: list[int]) -> li
                 "primary_doc": primary_docs[i],
             }
         )
+    return results
+
+
+def fetch_submissions_page(filename: str) -> dict:
+    """Fetches one paginated page of a company's older filing history, as
+    referenced by `submissions['filings']['files']`. Same flat shape as
+    the 'recent' block, just not wrapped under 'filings'."""
+    return _rate_limited_get(f"https://data.sec.gov/submissions/{filename}").json()
+
+
+def find_10k_accessions(submissions: dict, target_fiscal_years: list[int]) -> list[dict]:
+    """Filter a company's `submissions` JSON down to its 10-K filings whose
+    report period falls in the target fiscal years. Uses reportDate (the
+    filing's period-of-report) rather than filingDate, since a FY24 10-K is
+    typically filed in FY25 — matching on filingDate would miss it.
+
+    `filings.recent` only holds a company's most recent filings — not
+    bounded by fiscal year, by filing count. A high filing-volume company
+    (e.g. a bank filing hundreds of Form 4s a year) can push even a
+    recent 10-K out of that window entirely. When a target year isn't
+    found there, we additionally walk `filings.files` (older filings,
+    paginated, newest page first) until every target year is found or the
+    pages run out — so this only costs extra requests when actually needed.
+    """
+    recent = submissions.get("filings", {}).get("recent", {})
+    results = _scan_10k_block(recent, target_fiscal_years)
+    missing_years = set(target_fiscal_years) - {r["fiscal_year"] for r in results}
+
+    for page in submissions.get("filings", {}).get("files", []):
+        if not missing_years:
+            break
+        page_data = fetch_submissions_page(page["name"])
+        for r in _scan_10k_block(page_data, target_fiscal_years):
+            if r["fiscal_year"] in missing_years:
+                results.append(r)
+                missing_years.discard(r["fiscal_year"])
+
     return results
 
 

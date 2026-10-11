@@ -25,11 +25,21 @@ def extract_facts(
     target_fiscal_years: list[int],
     form_type: str = "10-K",
     fiscal_period: str = "FY",
+    known_accessions: set[str] | None = None,
 ) -> list[dict]:
     """Walk companyfacts[TAXONOMY][element][units][unit][] entries and keep
     only those matching our form/period/year filter. Deduplicates by
     (element_name, fiscal_year, unit) keeping the entry with an accession
     number (a fact without one cannot be cited, so it is worthless here).
+
+    `known_accessions`, when given, additionally restricts results to
+    facts whose `accn` is one we actually ingested into `filings` — a
+    company's comparative financial statements tag prior-year figures with
+    the accession of whichever filing they APPEAR in, not that period's
+    own 10-K, and `companyfacts` covers a company's full tagged history
+    regardless of which specific filings were fetched. Without this guard,
+    `store_facts` can be asked to insert a row whose accession_no has no
+    matching `filings` row, violating its foreign key.
     """
     taxonomy_facts = company_facts.get("facts", {}).get(TAXONOMY, {})
     rows: dict[tuple, dict] = {}
@@ -49,6 +59,8 @@ def extract_facts(
                     continue
                 accession_no = entry.get("accn")
                 if not accession_no:
+                    continue
+                if known_accessions is not None and accession_no not in known_accessions:
                     continue
 
                 period_type = "duration" if "start" in entry else "instant"
