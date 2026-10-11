@@ -87,7 +87,7 @@ st.markdown(
     }
     .stance-hero h1, #stance-title {
         margin: 0; font-size: 1.85rem; letter-spacing: -0.01em;
-        color: #FFFFFF !important; position: relative;
+        color: #B3CFE5 !important; position: relative;
     }
     .stance-hero p { margin: 0.4rem 0 0 0; color: var(--blue-light); font-size: 0.95rem; position: relative; }
 
@@ -258,7 +258,7 @@ st.markdown(
 st.markdown(
     """
     <div class="stance-hero">
-      <h1 id="stance-title" style="color:#FFFFFF !important; margin:0; font-size:1.75rem;">STANCE</h1>
+      <h1 id="stance-title" style="color:#B3CFE5 !important; margin:0; font-size:1.75rem;">STANCE</h1>
       <p style="color:#B3CFE5 !important; margin:0.4rem 0 0 0; font-size:0.95rem;">
       <b>S</b>EC <b>T</b>ext <b>a</b>nd Accounting <b>N</b>umeric <b>C</b>hecking <b>E</b>ngine
       &mdash; an agentic research copilot over SEC filings.</p>
