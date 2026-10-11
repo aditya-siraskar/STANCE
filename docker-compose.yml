@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: stance_postgres
+    environment:
+      POSTGRES_USER: stance
+      POSTGRES_PASSWORD: stance
+      POSTGRES_DB: stance
+    ports:
+      - "5432:5432"
+    volumes:
+      - stance_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stance -d stance"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  stance_pgdata:

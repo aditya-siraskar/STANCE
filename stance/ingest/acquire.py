@@ -14,7 +14,10 @@ import requests
 
 from stance.config import settings
 
-RAW_DIR = Path("/kaggle/working/raw")
+# Anchored to the repo root (two levels up from this file: stance/ingest/)
+# rather than the notebook's cwd, so the cache lands in the same place
+# whether a notebook runs from notebooks/ or the repo root.
+RAW_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "raw"
 _last_request_ts = 0.0
 
 

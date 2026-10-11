@@ -1,6 +1,6 @@
-"""Evaluation harness driver. Meant to run against a live Neon DB and LLM
-API keys (i.e. inside a Kaggle notebook or locally with .env configured) —
-it exercises the real graph, not mocks, unlike the unit tests in tests/.
+"""Evaluation harness driver. Meant to run against the local Postgres
+(docker-compose) and real LLM API keys (.env configured) — it exercises
+the real graph, not mocks, unlike the unit tests in tests/.
 
 Produces the headline table: per-question route/answer/verifier report,
 plus the before/after hallucination-rate comparison from the injection

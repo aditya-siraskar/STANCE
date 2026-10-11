@@ -5,52 +5,73 @@ an agentic research copilot over SEC filings where narrative comes from
 retrieved text, every number comes from a structured fact table, and the
 language model never performs arithmetic.
 
-See [`KAGGLE_BUILD_PLAN.md`](KAGGLE_BUILD_PLAN.md) for the current build plan
-(Kaggle notebooks + Neon Postgres, small-scale, 6 phases) and
-[`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) for the full GCP deployment
-plan this project graduates into once the agents are proven end-to-end.
+Runs entirely **locally**: Postgres + pgvector in Docker, 5 notebooks that
+build the corpus and prove each agent, and a Streamlit UI to demo the
+whole thing end to end.
 
-## Status
+See [`LOCAL_BUILD_PLAN.md`](LOCAL_BUILD_PLAN.md) for the phase-by-phase
+build plan and [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) for the
+full GCP deployment plan this project graduates into afterward.
 
-All 6 phases scaffolded and unit-tested locally (44 tests, ruff-clean).
-**Not yet run against a live Neon database or real LLM API keys** — that
-requires the one-time setup in "Running it" below, done on Kaggle.
+## Quickstart
 
-| Phase | Notebook | Package modules | Local test status |
-|---|---|---|---|
-| 0 — Setup & schema | `00_setup_and_schema.ipynb` | `config`, `contracts`, `db`, `seed` | tested |
-| 1 — Ingestion | `01_ingestion.ipynb` | `ingest/acquire`, `parse`, `segment`, `chunk`, `embed`, `facts` | parse/segment/chunk/facts/acquire tested; `embed` needs live run |
-| 2 — Retrieval | `02_retrieval.ipynb` | `retrieval/hybrid`, `rerank`, `expand` | `expand` tested; `hybrid`/`rerank` need a live DB |
-| 3 — Numeric layer | `03_numeric_layer.ipynb` | `numeric/resolver`, `calculator`, `sandbox`, `executor`, `interpret` | fully tested (sandbox/executor/interpret run against mocked facts) |
-| 4 — Agent graph | `04_agent_graph.ipynb` | `agents/scope`, `router`, `planner`, `writer`, `graph`, `llm` | tested with mocked LLM/DB calls, incl. real LangGraph execution |
-| 5 — Verifier & eval | `05_verifier_and_eval.ipynb` | `agents/verifier`, `eval/run_eval.py` | verifier tested incl. the injection-defeat case; `run_eval.py` needs a live run |
+```bash
+docker compose up -d                        # local Postgres + pgvector
+pip install -e ".[dev,retrieval,agents,ui]"  # pulls torch — slow once
+cp .env.example .env                        # fill in GROQ_API_KEY etc.
+```
 
-## Running it
+Then run the notebooks **in order** — each depends on data the previous
+one wrote:
 
-1. Create a [Neon](https://neon.tech) project, enable the `vector` extension.
-2. Push this repo to GitHub (public or accessible to your Kaggle account).
-3. In each notebook, set `REPO_URL` to your repo's clone URL.
-4. In Kaggle: **Settings > Internet > On**, then add Secrets:
-   `NEON_DATABASE_URL`, `GROQ_API_KEY`, `GOOGLE_AI_API_KEY`.
-5. Run notebooks `00` through `05` in order — each depends on data the
-   previous one wrote to Neon.
+| Notebook | What it does |
+|---|---|
+| `notebooks/01_setup_and_ingestion.ipynb` | Creates the schema, seeds the 5-company watchlist, ingests 10-Ks (parse/segment/chunk/embed), extracts XBRL facts |
+| `notebooks/02_retrieval.ipynb` | Hybrid (dense+FTS+RRF) retrieval, reranking ablation |
+| `notebooks/03_numeric_layer.ipynb` | Resolver/calculator/sandbox, including the two failure-mode test cases that prove the design |
+| `notebooks/04_agent_graph.ipynb` | Full LangGraph pipeline on 5 mixed questions |
+| `notebooks/05_verifier_and_eval.ipynb` | Golden-set eval + the injection-defence demo |
+
+Then launch the demo UI:
+
+```bash
+streamlit run apps/ui/app.py
+```
+
+Open http://localhost:8501 — it has **Ask**, **Trace**, **Verification**,
+and **Evaluation** tabs, each with inline explanation of what it's showing
+and why. A sidebar checklist tells you if the corpus isn't ingested yet.
+
+## .env
+
+Only `GROQ_API_KEY` is required to get the agent graph running (Groq's
+free tier). `DATABASE_URL` already defaults to match `docker-compose.yml`
+— you don't need to set it unless you're running a different Postgres.
+`GOOGLE_AI_API_KEY` / `DEEPSEEK_API_KEY` are optional alternate providers
+— see `stance/llm.py`'s `NODE_POLICY` to route a node to one of them.
+
+## Stopping / resetting
+
+```bash
+docker compose down          # stop Postgres, keep data
+docker compose down -v       # stop Postgres, DELETE all ingested data
+```
 
 ## Local dev
 
 ```bash
-pip install -e ".[dev]"                    # core + test tooling, fast (~seconds)
-pip install -e ".[dev,retrieval,agents]"   # + embeddings/reranker/LangGraph/LiteLLM (pulls torch, slow)
-cp .env.example .env                       # fill in NEON_DATABASE_URL etc.
+pip install -e ".[dev]"                           # core + test tooling, fast (~seconds)
+pip install -e ".[dev,retrieval,agents,ui]"        # + embeddings/reranker/LangGraph/LiteLLM/Streamlit
 pytest -q
-ruff check stance tests eval
+ruff check stance tests eval apps
 ```
 
 ## Package layout
 
-- `stance/config.py` — settings (Kaggle Secrets or `.env`)
+- `stance/config.py` — settings (`.env`, defaults match `docker-compose.yml`)
 - `stance/contracts.py` — typed inter-agent contracts (`Scope`, `Plan`,
   `ComputationSpec` — no numeric output field, `VerifierReport`)
-- `stance/db.py` — Neon schema (chunks + XBRL facts, one database)
+- `stance/db.py` — Postgres schema (chunks + XBRL facts, one database)
 - `stance/seed.py` — watchlist (5 companies) + concept→XBRL-tag aliases
 - `stance/ingest/` — acquire (EDGAR), parse (iXBRL→text), segment (Item
   1A/7/7A/8), chunk (parent-child), embed (bge-small), facts (XBRL→table)
@@ -66,6 +87,7 @@ ruff check stance tests eval
 - `stance/llm.py` — LiteLLM per-node model routing policy
 - `eval/` — golden set (20 Q, stratified incl. an unanswerable stratum),
   injection payloads, `run_eval.py` driver
+- `apps/ui/app.py` — Streamlit demo (Ask / Trace / Verification / Evaluation)
 
 Notebooks in `notebooks/` are thin drivers that call into `stance/` — they
 contain no logic of their own, which is what lets this port to GCP later
@@ -78,7 +100,7 @@ without a rewrite (see `IMPLEMENTATION_PLAN.md`).
   same routing behaviour.
 - **Numeric answers are always deterministic**, in both the fast and full
   route — an LLM only ever drafts narrative prose, never a figure.
-- **"Ambiguous ticker" (T1.2) is represented as "no watchlist match"**
+- **"Ambiguous ticker" (T1.2)** is represented as "no watchlist match"
   rather than a genuine cross-company EDGAR name collision, since the
   watchlist is a fixed 5 companies at this project's scale.
 - **`cagr` and multi-operand `sum`** are implemented in the sandbox but not

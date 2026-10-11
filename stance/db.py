@@ -1,9 +1,10 @@
-"""Neon Postgres engine + schema. One database, two destinations:
-chunk vectors (pgvector) and XBRL facts (relational) — a citation joining
-to a computed figure is a SQL join, not a distributed lookup.
+"""Local Postgres (pgvector) engine + schema. One database, two
+destinations: chunk vectors (pgvector) and XBRL facts (relational) — a
+citation joining to a computed figure is a SQL join, not a distributed
+lookup.
 
 Schema creation is idempotent (`IF NOT EXISTS` throughout) so re-running
-00_setup_and_schema.ipynb never fails or duplicates.
+notebook 01 never fails or duplicates.
 """
 from __future__ import annotations
 
@@ -111,11 +112,12 @@ CREATE TABLE IF NOT EXISTS query_traces (
 
 
 def get_engine() -> Engine:
-    if not settings.neon_database_url:
+    if not settings.database_url:
         raise RuntimeError(
-            "NEON_DATABASE_URL is not set. Add it as a Kaggle Secret or in .env."
+            "DATABASE_URL is not set. Default matches docker-compose.yml — "
+            "override it in .env only if you're using a different Postgres."
         )
-    return create_engine(settings.neon_database_url, pool_pre_ping=True)
+    return create_engine(settings.database_url, pool_pre_ping=True)
 
 
 def init_schema(engine: Engine | None = None) -> None:

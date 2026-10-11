@@ -17,6 +17,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
       - name: Lint
-        run: ruff check stance tests
+        run: ruff check stance tests eval apps
       - name: Test
         run: pytest -q
