@@ -29,7 +29,7 @@ from stance.retrieval.rerank import rerank
 
 class GraphState(TypedDict, total=False):
     question: str
-    scope: Scope
+    scope: dict  # Scope.model_dump() — see note on scope_node below
     clarification: str
     plan_steps: list[dict]
     route: str
@@ -49,13 +49,21 @@ def build_graph(engine: Engine, latest_available_year: int = 2024):
         if isinstance(result, AmbiguousScope):
             return {"clarification": f"Could not resolve the question: {result.reason}. "
                                        f"Known tickers: {', '.join(result.candidates)}"}
-        return {"scope": result}
+        # Stored as a plain dict, not the Scope object itself: LangGraph's
+        # checkpointer persists graph state between node transitions, and
+        # a custom Pydantic class crossing that boundary triggers a
+        # "deserializing unregistered type" warning today (and will be a
+        # hard error once LANGGRAPH_STRICT_MSGPACK defaults to true) —
+        # the same reason plan_steps and verifier_report are stored as
+        # dicts below rather than as PlanStep/VerifierReport instances.
+        return {"scope": result.model_dump()}
 
     def scope_branch(state: GraphState) -> str:
         return "clarify" if "clarification" in state else "planner"
 
     def planner_node(state: GraphState) -> GraphState:
-        plan = build_plan(state["question"], state["scope"])
+        scope = Scope.model_validate(state["scope"])
+        plan = build_plan(state["question"], scope)
         return {"plan_steps": [s.model_dump() for s in plan.steps], "route": route(plan)}
 
     def answer_steps_node(state: GraphState) -> GraphState:
