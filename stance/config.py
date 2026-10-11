@@ -23,7 +23,10 @@ def _load_kaggle_secrets() -> dict[str, str]:
 
     client = UserSecretsClient()
     loaded: dict[str, str] = {}
-    for key in ("NEON_DATABASE_URL", "GROQ_API_KEY", "GOOGLE_AI_API_KEY", "SEC_USER_AGENT"):
+    for key in (
+        "NEON_DATABASE_URL", "GROQ_API_KEY", "GOOGLE_AI_API_KEY", "DEEPSEEK_API_KEY",
+        "SEC_USER_AGENT",
+    ):
         try:
             value = client.get_secret(key)
         except Exception:  # noqa: BLE001, S112 — an unset secret must not crash config import
@@ -42,6 +45,7 @@ class Settings(BaseSettings):
     neon_database_url: str = ""
     groq_api_key: str = ""
     google_ai_api_key: str = ""
+    deepseek_api_key: str = ""
 
     # EDGAR requires a descriptive User-Agent with a real contact email,
     # and enforces a 10 req/s ceiling. Override via env/secret for your own use.
@@ -54,3 +58,17 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# LiteLLM auto-detects each provider's key from a provider-specific env var
+# (GROQ_API_KEY, DEEPSEEK_API_KEY, GEMINI_API_KEY, ...) based on the
+# "<provider>/<model>" prefix in NODE_POLICY — it must NOT be set globally
+# via litellm.api_key, which would apply one key to every provider's calls.
+# GROQ_API_KEY and DEEPSEEK_API_KEY already match LiteLLM's expected names;
+# only Gemini's needs bridging, since we keep the Kaggle-secret name
+# GOOGLE_AI_API_KEY for clarity but LiteLLM looks for GEMINI_API_KEY.
+if settings.google_ai_api_key:
+    os.environ.setdefault("GEMINI_API_KEY", settings.google_ai_api_key)
+if settings.groq_api_key:
+    os.environ.setdefault("GROQ_API_KEY", settings.groq_api_key)
+if settings.deepseek_api_key:
+    os.environ.setdefault("DEEPSEEK_API_KEY", settings.deepseek_api_key)

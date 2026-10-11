@@ -90,7 +90,11 @@ CREATE TABLE IF NOT EXISTS fact_aliases (
     element_name  TEXT NOT NULL,
     cik           TEXT,            -- NULL = applies to any company
     priority      INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY (concept, element_name, cik)
+    -- A plain PRIMARY KEY here would force cik NOT NULL (Postgres makes
+    -- every PK column NOT NULL), which breaks the "NULL = any company"
+    -- seed rows. UNIQUE ... NULLS NOT DISTINCT (PG15+) keeps cik nullable
+    -- while still deduplicating repeated NULL-cik rows on re-seed.
+    UNIQUE NULLS NOT DISTINCT (concept, element_name, cik)
 );
 
 CREATE TABLE IF NOT EXISTS query_traces (
