@@ -13,12 +13,12 @@ snapshot, it has no opinion on how that snapshot was produced.
 from __future__ import annotations
 
 PIPELINE_STAGES = [
-    {"key": "scope", "icon": "\U0001F9ED", "label": "Scope", "sub": "ticker + period, no LLM"},
-    {"key": "planner", "icon": "\U0001F9E0", "label": "Planner", "sub": "LLM decomposition"},
-    {"key": "router", "icon": "\U0001F500", "label": "Router", "sub": "deterministic triage"},
-    {"key": "answer_steps", "icon": "⚙️", "label": "Execute", "sub": "numeric | retrieval+writer"},
-    {"key": "verify", "icon": "✅", "label": "Verifier", "sub": "re-derives every figure"},
-    {"key": "response", "icon": "\U0001F4EC", "label": "Response", "sub": "cited answer"},
+    {"key": "scope", "label": "Scope", "sub": "ticker + period, no LLM"},
+    {"key": "planner", "label": "Planner", "sub": "LLM decomposition"},
+    {"key": "router", "label": "Router", "sub": "deterministic triage"},
+    {"key": "answer_steps", "label": "Execute", "sub": "numeric | retrieval+writer"},
+    {"key": "verify", "label": "Verifier", "sub": "re-derives every figure"},
+    {"key": "response", "label": "Response", "sub": "cited answer"},
 ]
 
 STAGE_KEYS = [s["key"] for s in PIPELINE_STAGES]
@@ -53,14 +53,14 @@ def render_pipeline(completed: list[str], active: str | None, plan_steps: list[d
             narrative_cls = "used" if "narrative" in kinds else "unused"
             sub_html = (
                 f'<div class="substage-row">'
-                f'<span class="substage {numeric_cls}">\U0001F522 numeric</span>'
-                f'<span class="substage {narrative_cls}">\U0001F4C4 narrative</span>'
+                f'<span class="substage {numeric_cls}">Numeric</span>'
+                f'<span class="substage {narrative_cls}">Narrative</span>'
                 f'</div>'
             )
 
         boxes.append(
             f'<div class="stage {state}">'
-            f'<div class="stage-icon">{stage["icon"]}</div>'
+            f'<div class="stage-num">{i + 1}</div>'
             f'<div class="stage-label">{stage["label"]}</div>'
             f'{sub_html}'
             f'</div>'

@@ -70,5 +70,5 @@ def test_render_pipeline_highlights_used_substage_only():
     numeric_only_steps = [{"kind": "numeric"}]
     html = render_pipeline(completed=["scope", "planner", "router"], active="answer_steps",
                             plan_steps=numeric_only_steps)
-    assert 'substage used">\U0001F522 numeric' in html
-    assert 'substage unused">\U0001F4C4 narrative' in html
+    assert 'substage used">Numeric' in html
+    assert 'substage unused">Narrative' in html

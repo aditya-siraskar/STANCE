@@ -32,7 +32,7 @@ from pipeline_viz import render_pipeline
 
 from stance.config import settings
 
-st.set_page_config(page_title="STANCE", page_icon="\U0001F4CA", layout="wide")
+st.set_page_config(page_title="STANCE", layout="wide")
 
 # --------------------------------------------------------------------------
 # Theme — [0A1931, 1A3D63, 4A7FA7, B3CFE5, F6FAFD], navy-to-powder-blue.
@@ -80,7 +80,12 @@ st.markdown(
         flex: 1 1 120px; min-width: 110px; border-radius: 12px; padding: 0.7rem 0.5rem;
         text-align: center; position: relative; z-index: 1;
     }
-    .stage-icon { font-size: 1.4rem; line-height: 1; margin-bottom: 0.3rem; }
+    .stage-num {
+        width: 24px; height: 24px; line-height: 24px; border-radius: 50%;
+        font-size: 0.72rem; font-weight: 700; margin: 0 auto 0.4rem;
+        background: rgba(255,255,255,0.25); color: inherit;
+    }
+    .stage.pending .stage-num { background: rgba(74,127,167,0.18); color: var(--blue-mid); }
     .stage-label { font-weight: 700; font-size: 0.82rem; }
     .stage-sub { font-size: 0.65rem; opacity: 0.85; margin-top: 0.15rem; }
 
@@ -132,6 +137,21 @@ st.markdown(
         background: white; border: 1px solid var(--blue-light); border-radius: 12px;
         padding: 1.1rem 1.3rem; margin-top: 0.8rem; box-shadow: 0 2px 10px rgba(10,25,49,0.06);
     }
+
+    /* ---- status checklist (sidebar) ---- */
+    .status-dot {
+        display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+        margin-right: 0.45rem; vertical-align: middle;
+    }
+    .status-dot.ok { background: var(--blue-dark); }
+    .status-dot.pending { background: var(--blue-light); border: 1px solid var(--blue-mid); }
+    .status-label { font-size: 0.85rem; }
+    .status-text {
+        float: right; font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+    .status-text.ok { color: var(--blue-dark); }
+    .status-text.pending { color: var(--blue-mid); opacity: 0.7; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -140,7 +160,7 @@ st.markdown(
 st.markdown(
     """
     <div class="stance-hero">
-      <h1>\U0001F4CA STANCE</h1>
+      <h1>STANCE</h1>
       <p><b>S</b>EC <b>T</b>ext <b>a</b>nd Accounting <b>N</b>umeric <b>C</b>hecking <b>E</b>ngine
       &mdash; an agentic research copilot over SEC filings.</p>
     </div>
@@ -180,7 +200,7 @@ try:
     with engine.connect() as _probe:
         _probe.execute(sql_text("SELECT 1"))
 except OperationalError:
-    st.error("**Can't reach Postgres.**", icon="\U0001F6A8")
+    st.error("**Can't reach Postgres.**")
     st.markdown(
         "STANCE expects a local Postgres with pgvector, matching `docker-compose.yml`.\n\n"
         "```bash\ndocker compose up -d\n```\n"
@@ -188,13 +208,13 @@ except OperationalError:
     )
     st.stop()
 except Exception as exc:  # noqa: BLE001 — any other startup failure also gets a friendly panel
-    st.error(f"**Could not initialise the database connection:** {exc}", icon="\U0001F6A8")
+    st.error(f"**Could not initialise the database connection:** {exc}")
     st.stop()
 
 try:
     graph = _get_graph(engine)
 except ModuleNotFoundError:
-    st.error("**Agent dependencies aren't installed.**", icon="\U0001F6A8")
+    st.error("**Agent dependencies aren't installed.**")
     st.code('pip install -e ".[dev,retrieval,agents,ui]"', language="bash")
     st.stop()
 
@@ -244,7 +264,14 @@ with st.sidebar:
         ("XBRL facts extracted", counts["facts"] > 0),
     ]
     for label, ok in checklist:
-        st.markdown(f"{'✅' if ok else '⚠️'} {label}")
+        status_cls = "ok" if ok else "pending"
+        status_text = "done" if ok else "pending"
+        st.markdown(
+            f'<span class="status-dot {status_cls}"></span>'
+            f'<span class="status-label">{label}</span> '
+            f'<span class="status-text {status_cls}">{status_text}</span>',
+            unsafe_allow_html=True,
+        )
     if not corpus_ready:
         st.caption("Run `notebooks/01_setup_and_ingestion.ipynb` first to populate the corpus.")
 
@@ -259,7 +286,6 @@ if not corpus_ready:
     st.warning(
         "No ingested data yet — the Ask tab will still work, but every question will come back "
         "unresolved. Run `notebooks/01_setup_and_ingestion.ipynb` first.",
-        icon="⚠️",
     )
 
 
@@ -268,7 +294,7 @@ if not corpus_ready:
 # --------------------------------------------------------------------------
 
 tab_ask, tab_trace, tab_verify, tab_eval = st.tabs(
-    ["\U0001F50D Ask", "\U0001F9ED Trace", "✅ Verification", "\U0001F4CA Evaluation"]
+    ["Ask", "Trace", "Verification", "Evaluation"]
 )
 
 EXAMPLE_QUESTIONS = [
@@ -336,7 +362,7 @@ with tab_ask:
         st.markdown(f"**Q:** {st.session_state['last_question']}")
 
         if "clarification" in result:
-            st.warning(result["clarification"], icon="❓")
+            st.warning(result["clarification"])
             st.caption(
                 "STANCE refuses to guess an unresolved company or period — this is deliberate: "
                 "a silently wrong entity match is worse than an explicit question."
@@ -366,7 +392,7 @@ with tab_trace:
         "the fact, it's exactly the state the graph carried."
     )
     if "last_result" not in st.session_state:
-        st.info("Ask a question in the **Ask** tab first.", icon="\U0001F448")
+        st.info("Ask a question in the **Ask** tab first.")
     else:
         result = st.session_state["last_result"]
         if "clarification" in result:
@@ -374,8 +400,7 @@ with tab_trace:
         else:
             st.markdown("#### Plan steps")
             for i, step in enumerate(result.get("plan_steps", []), 1):
-                kind_icon = "\U0001F522" if step["kind"] == "numeric" else "\U0001F4C4"
-                st.markdown(f"{kind_icon} **Step {i}** ({step['kind']}): {step['sub_question']}")
+                st.markdown(f"**Step {i} — {step['kind'].title()}:** {step['sub_question']}")
 
             st.markdown("#### Per-step answers (before verification)")
             for ans in result.get("step_answers", []):
@@ -392,7 +417,7 @@ with tab_verify:
         "— this is also the prompt-injection defence: a fabricated number has no real `fact_id`."
     )
     if "last_result" not in st.session_state:
-        st.info("Ask a question in the **Ask** tab first.", icon="\U0001F448")
+        st.info("Ask a question in the **Ask** tab first.")
     else:
         result = st.session_state["last_result"]
         report = result.get("verifier_report")
@@ -408,9 +433,9 @@ with tab_verify:
             if report["rejected_details"]:
                 st.markdown("#### Rejected figures")
                 for r in report["rejected_details"]:
-                    st.error(f"`{r['claimed_value']}` — {r['reason']}: {r['detail']}", icon="❌")
+                    st.error(f"`{r['claimed_value']}` — {r['reason']}: {r['detail']}")
             else:
-                st.success("Every cited figure traced cleanly to `xbrl_facts`.", icon="✅")
+                st.success("Every cited figure traced cleanly to `xbrl_facts`.")
 
     st.divider()
     st.markdown("#### Injection defence demo")
