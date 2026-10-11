@@ -31,6 +31,17 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
+# In a Jupyter kernel, HF Hub's download progress bars render as live
+# ipywidgets, each update sending a comm message over a new/kept-open
+# socket. Across a long debugging session re-running model-loading cells
+# many times, this is a real, observed path to exhausting the kernel
+# process's open-file budget (traced live: a HF Hub progress-bar update ->
+# ipywidgets comm -> new zmq socket -> "Too many open files", which then
+# cascades into ipykernel's own exception reporting also failing, masking
+# the real error). Disabling Hub progress bars removes that whole
+# codepath; model downloads still work, just silently.
+os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+
 # LiteLLM auto-detects each provider's key from a provider-specific env var
 # (GROQ_API_KEY, DEEPSEEK_API_KEY, GEMINI_API_KEY, ...) based on the
 # "<provider>/<model>" prefix in NODE_POLICY — it must NOT be set globally
