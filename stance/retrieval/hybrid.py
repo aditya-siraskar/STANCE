@@ -10,30 +10,43 @@ from sqlalchemy.engine import Engine
 
 _RRF_K = 60  # standard RRF damping constant
 
+# Every :param that can be NULL is explicitly cast via CAST(:p AS type).
+# Without this, Postgres raises "could not determine data type of
+# parameter" — a parameter used only in "(:p IS NULL OR col = :p)" gives
+# the planner no type context from the IS NULL branch alone, and when the
+# value really is NULL the equality branch can't supply one either.
+#
+# Note: SQLAlchemy's text() bind-parameter parser does NOT recognize
+# Postgres's ":name::type" shorthand — ":cik::text" is silently parsed as
+# zero bind parameters (verified: `text(":cik::text").., _bindparams` is
+# empty), which drops the parameter from the query entirely rather than
+# raising. CAST(:name AS type) is unambiguous to both parsers and is what
+# actually works.
 _HYBRID_SQL = """
 WITH dense AS (
-    SELECT chunk_id, RANK() OVER (ORDER BY embedding <=> :query_embedding) AS rnk
+    SELECT chunk_id, RANK() OVER (ORDER BY embedding <=> CAST(:query_embedding AS vector)) AS rnk
     FROM chunks
-    WHERE (:cik IS NULL OR cik = :cik)
-      AND (:fiscal_year IS NULL OR fiscal_year = :fiscal_year)
-      AND (:item_code IS NULL OR item_code = :item_code)
-    ORDER BY embedding <=> :query_embedding
-    LIMIT :candidate_pool
+    WHERE (CAST(:cik AS text) IS NULL OR cik = CAST(:cik AS text))
+      AND (CAST(:fiscal_year AS integer) IS NULL OR fiscal_year = CAST(:fiscal_year AS integer))
+      AND (CAST(:item_code AS text) IS NULL OR item_code = CAST(:item_code AS text))
+    ORDER BY embedding <=> CAST(:query_embedding AS vector)
+    LIMIT CAST(:candidate_pool AS integer)
 ),
 lexical AS (
     SELECT chunk_id, RANK() OVER (ORDER BY ts_rank_cd(tsv, query) DESC) AS rnk
     FROM chunks, plainto_tsquery('english', :query_text) query
     WHERE tsv @@ query
-      AND (:cik IS NULL OR cik = :cik)
-      AND (:fiscal_year IS NULL OR fiscal_year = :fiscal_year)
-      AND (:item_code IS NULL OR item_code = :item_code)
+      AND (CAST(:cik AS text) IS NULL OR cik = CAST(:cik AS text))
+      AND (CAST(:fiscal_year AS integer) IS NULL OR fiscal_year = CAST(:fiscal_year AS integer))
+      AND (CAST(:item_code AS text) IS NULL OR item_code = CAST(:item_code AS text))
     ORDER BY ts_rank_cd(tsv, query) DESC
-    LIMIT :candidate_pool
+    LIMIT CAST(:candidate_pool AS integer)
 ),
 fused AS (
     SELECT
         COALESCE(dense.chunk_id, lexical.chunk_id) AS chunk_id,
-        COALESCE(1.0 / (:rrf_k + dense.rnk), 0) + COALESCE(1.0 / (:rrf_k + lexical.rnk), 0) AS score
+        COALESCE(1.0 / (CAST(:rrf_k AS integer) + dense.rnk), 0)
+            + COALESCE(1.0 / (CAST(:rrf_k AS integer) + lexical.rnk), 0) AS score
     FROM dense
     FULL OUTER JOIN lexical ON dense.chunk_id = lexical.chunk_id
 )
@@ -42,7 +55,7 @@ SELECT c.chunk_id, c.text, c.accession_no, c.cik, c.ticker, c.fiscal_year, c.ite
 FROM fused
 JOIN chunks c ON c.chunk_id = fused.chunk_id
 ORDER BY fused.score DESC
-LIMIT :top_k
+LIMIT CAST(:top_k AS integer)
 """
 
 
