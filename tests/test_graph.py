@@ -50,3 +50,36 @@ def test_full_numeric_traversal_produces_verified_answer(monkeypatch):
     assert result["route"] == "fast"
     assert "391,035,000,000" in result["final_answer"]
     assert result["verifier_report"]["figures_rejected"] == 0
+
+
+def test_router_is_its_own_streamable_node(monkeypatch):
+    """Regression test for the UI's live progress feature: router must be
+    a real, separate LangGraph node so graph.stream() yields its
+    completion as a distinct event, not folded invisibly into planner."""
+    plan = Plan(
+        question="What was AAPL FY24 revenue?",
+        steps=[PlanStep(sub_question="AAPL FY24 revenue", kind="numeric", scope=SCOPE)],
+    )
+    monkeypatch.setattr(graph_module, "resolve_scope", lambda engine, q, y: SCOPE)
+    monkeypatch.setattr(graph_module, "build_plan", lambda q, s: plan)
+    monkeypatch.setattr(graph_module, "route", lambda p: "fast")
+    monkeypatch.setattr(
+        graph_module, "answer_numeric_step",
+        lambda engine, sub_q, cik, years: ("Revenue FY24: 391,035,000,000 USD [fact_id=f-1]", ["f-1"]),
+    )
+    monkeypatch.setattr(
+        graph_module, "verify_draft",
+        lambda engine, draft: VerifierReport(
+            figures_checked=1, figures_traced=1, figures_rejected=0, citation_coverage=1.0
+        ),
+    )
+
+    g = graph_module.build_graph(engine=None)
+    node_order = [
+        next(iter(update.keys()))
+        for update in g.stream(
+            {"question": "What was AAPL FY24 revenue?"},
+            config={"configurable": {"thread_id": "t-stream"}},
+        )
+    ]
+    assert node_order == ["scope", "planner", "router", "answer_steps", "verify"]

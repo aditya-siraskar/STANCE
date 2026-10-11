@@ -3,9 +3,10 @@
 Numeric steps are always answered deterministically (resolver/calculator/
 sandbox), in both the fast and full route — the LLM is only ever invoked
 for the planner (decomposition) and the writer (drafting narrative prose
-from retrieved text). `route` is computed and recorded for the
-cost-per-query metric even though, structurally, a plan with no narrative
-steps never invokes retrieval regardless of the label.
+from retrieved text). Router is its own node (not folded into planner)
+specifically so a `graph.stream()` caller — e.g. the Streamlit UI — can
+observe its completion as a distinct, real step rather than a synthetic
+one; it's otherwise a trivial, free call.
 
 Requires the `agents` extra (`pip install -e ".[agents]"`).
 """
@@ -20,7 +21,7 @@ from stance.agents.router import route
 from stance.agents.scope import AmbiguousScope, resolve_scope
 from stance.agents.verifier import strip_rejected_figures, verify_draft
 from stance.agents.writer import draft_narrative_answer
-from stance.contracts import FactNotFound, Scope
+from stance.contracts import FactNotFound, Plan, PlanStep, Scope
 from stance.numeric.interpret import answer_numeric_step
 from stance.retrieval.expand import expand_to_sections
 from stance.retrieval.hybrid import hybrid_search
@@ -64,7 +65,12 @@ def build_graph(engine: Engine, latest_available_year: int = 2024):
     def planner_node(state: GraphState) -> GraphState:
         scope = Scope.model_validate(state["scope"])
         plan = build_plan(state["question"], scope)
-        return {"plan_steps": [s.model_dump() for s in plan.steps], "route": route(plan)}
+        return {"plan_steps": [s.model_dump() for s in plan.steps]}
+
+    def router_node(state: GraphState) -> GraphState:
+        steps = [PlanStep.model_validate(s) for s in state["plan_steps"]]
+        plan = Plan(question=state["question"], steps=steps)
+        return {"route": route(plan)}
 
     def answer_steps_node(state: GraphState) -> GraphState:
         answers: list[str] = []
@@ -104,12 +110,14 @@ def build_graph(engine: Engine, latest_available_year: int = 2024):
     workflow = StateGraph(GraphState)
     workflow.add_node("scope", scope_node)
     workflow.add_node("planner", planner_node)
+    workflow.add_node("router", router_node)
     workflow.add_node("answer_steps", answer_steps_node)
     workflow.add_node("verify", verify_node)
 
     workflow.set_entry_point("scope")
     workflow.add_conditional_edges("scope", scope_branch, {"planner": "planner", "clarify": END})
-    workflow.add_edge("planner", "answer_steps")
+    workflow.add_edge("planner", "router")
+    workflow.add_edge("router", "answer_steps")
     workflow.add_edge("answer_steps", "verify")
     workflow.add_edge("verify", END)
 

@@ -7,6 +7,11 @@ Requires: `pip install -e ".[dev,retrieval,agents,ui]"`, `docker compose up -d`,
 and a `.env` with GROQ_API_KEY set (see .env.example). Run notebooks 01-05
 first to populate the corpus — this app is a window onto what they built,
 not a separate pipeline.
+
+The pipeline diagram at the top is driven by graph.stream() — each box
+lights up exactly when that LangGraph node actually completes, not on a
+simulated timer. See stance/agents/graph.py's docstring on why `router`
+is its own node: this is the reason.
 """
 from __future__ import annotations
 
@@ -21,32 +26,112 @@ from sqlalchemy.exc import OperationalError
 # Allow running this file directly (streamlit run apps/ui/app.py) without
 # having pip-installed the package in editable mode.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from pipeline_viz import render_pipeline
 
 from stance.config import settings
 
 st.set_page_config(page_title="STANCE", page_icon="\U0001F4CA", layout="wide")
 
+# --------------------------------------------------------------------------
+# Theme — [0A1931, 1A3D63, 4A7FA7, B3CFE5, F6FAFD], navy-to-powder-blue.
+# --------------------------------------------------------------------------
+
 st.markdown(
     """
     <style>
+    :root {
+        --navy: #0A1931;
+        --blue-dark: #1A3D63;
+        --blue-mid: #4A7FA7;
+        --blue-light: #B3CFE5;
+        --bg: #F6FAFD;
+    }
+    .stApp { background: var(--bg); }
+    h1, h2, h3, h4 { color: var(--navy) !important; }
+    p, li, span, label { color: var(--navy); }
+
     .stance-hero {
-        padding: 1.25rem 1.5rem; border-radius: 12px; margin-bottom: 1rem;
-        background: linear-gradient(135deg, #1b2a4a 0%, #0f1b33 100%);
-        color: #eef2ff;
+        padding: 1.5rem 1.75rem; border-radius: 14px; margin-bottom: 1.25rem;
+        background: linear-gradient(120deg, var(--navy) 0%, var(--blue-dark) 100%);
+        color: var(--bg); box-shadow: 0 6px 18px rgba(10,25,49,0.25);
     }
-    .stance-hero h1 { margin: 0; font-size: 1.6rem; }
-    .stance-hero p { margin: 0.35rem 0 0 0; color: #b8c4e0; font-size: 0.92rem; }
+    .stance-hero h1 { margin: 0; font-size: 1.75rem; color: var(--bg) !important; }
+    .stance-hero p { margin: 0.4rem 0 0 0; color: var(--blue-light); font-size: 0.95rem; }
+
     .stance-rule {
-        border-left: 4px solid #4f7cff; padding: 0.6rem 0.9rem;
-        background: rgba(79,124,255,0.08); border-radius: 6px; font-size: 0.88rem;
+        border-left: 4px solid var(--blue-mid); padding: 0.6rem 0.9rem;
+        background: rgba(74,127,167,0.08); border-radius: 0 8px 8px 0; font-size: 0.86rem;
     }
-    .badge { display:inline-block; padding: 0.15rem 0.6rem; border-radius: 999px;
-             font-size: 0.78rem; font-weight: 600; }
-    .badge-fast { background:#dcfce7; color:#166534; }
-    .badge-full { background:#fef3c7; color:#92400e; }
-    .badge-ok   { background:#dcfce7; color:#166534; }
-    .badge-bad  { background:#fee2e2; color:#991b1b; }
-    .citation { color:#4f7cff; font-weight:600; }
+
+    /* ---- pipeline diagram ---- */
+    .pipeline-wrap {
+        background: white; border-radius: 16px; padding: 1.5rem 1.25rem 1.25rem;
+        margin-bottom: 1rem; box-shadow: 0 2px 14px rgba(10,25,49,0.08);
+        border: 1px solid var(--blue-light);
+    }
+    .pipeline-title {
+        font-size: 0.78rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+        color: var(--blue-mid); margin-bottom: 0.9rem;
+    }
+    .pipeline { display: flex; align-items: center; gap: 0; flex-wrap: wrap; }
+    .stage {
+        flex: 1 1 120px; min-width: 110px; border-radius: 12px; padding: 0.7rem 0.5rem;
+        text-align: center; position: relative; z-index: 1;
+    }
+    .stage-icon { font-size: 1.4rem; line-height: 1; margin-bottom: 0.3rem; }
+    .stage-label { font-weight: 700; font-size: 0.82rem; }
+    .stage-sub { font-size: 0.65rem; opacity: 0.85; margin-top: 0.15rem; }
+
+    .stage.pending { background: #eef4f9; color: var(--blue-mid); opacity: 0.6; }
+    .stage.pending .stage-sub { color: var(--blue-mid); }
+
+    .stage.active {
+        background: var(--blue-mid); color: white; transform: scale(1.06);
+        animation: pulseGlow 1.1s ease-in-out infinite;
+    }
+    .stage.active .stage-sub { color: var(--blue-light); }
+
+    .stage.done {
+        background: var(--blue-dark); color: white;
+        animation: popIn 0.35s ease-out;
+    }
+    .stage.done .stage-sub { color: var(--blue-light); }
+
+    .stage.warn {
+        background: var(--navy); color: white;
+        animation: popIn 0.35s ease-out;
+    }
+    .stage.warn .stage-sub { color: var(--blue-light); }
+
+    .connector { flex: 0 0 28px; height: 3px; background: var(--blue-light); margin: 0 -2px; align-self: center; margin-top: -22px; border-radius: 2px; }
+    .connector.done { background: var(--blue-dark); }
+
+    @keyframes pulseGlow {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(74,127,167,0.55); }
+        50% { box-shadow: 0 0 0 9px rgba(74,127,167,0); }
+    }
+    @keyframes popIn {
+        0% { transform: scale(0.88); opacity: 0.5; }
+        100% { transform: scale(1); opacity: 1; }
+    }
+
+    .substage-row { margin-top: 0.5rem; font-size: 0.68rem; }
+    .substage { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; margin: 0 0.15rem; }
+    .substage.used { background: rgba(255,255,255,0.25); font-weight: 700; }
+    .substage.unused { opacity: 0.35; }
+
+    .pipeline-status { font-size: 0.82rem; color: var(--blue-mid); font-weight: 600; margin-top: 0.6rem; min-height: 1.2rem; }
+
+    /* ---- badges / cards ---- */
+    .badge { display:inline-block; padding: 0.2rem 0.7rem; border-radius: 999px; font-size: 0.78rem; font-weight: 700; }
+    .badge-fast { background: var(--blue-light); color: var(--navy); }
+    .badge-full { background: var(--blue-mid); color: white; }
+    .answer-card {
+        background: white; border: 1px solid var(--blue-light); border-radius: 12px;
+        padding: 1.1rem 1.3rem; margin-top: 0.8rem; box-shadow: 0 2px 10px rgba(10,25,49,0.06);
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -118,7 +203,27 @@ corpus_ready = counts["chunks"] > 0 and counts["facts"] > 0
 
 
 # --------------------------------------------------------------------------
-# Sidebar — the "proper explanations" the project asked for.
+# The live pipeline diagram — rendered from graph.stream()'s actual
+# per-node completion events, not a simulated progress bar. Rendering
+# logic lives in pipeline_viz.py (imported above) so it's unit-testable
+# outside a Streamlit runtime.
+# --------------------------------------------------------------------------
+
+pipeline_placeholder = st.empty()
+status_placeholder = st.empty()
+
+if "completed_stages" not in st.session_state:
+    st.session_state["completed_stages"] = []
+    st.session_state["plan_steps_for_diagram"] = None
+
+pipeline_placeholder.markdown(
+    render_pipeline(st.session_state["completed_stages"], None, st.session_state["plan_steps_for_diagram"]),
+    unsafe_allow_html=True,
+)
+
+
+# --------------------------------------------------------------------------
+# Sidebar
 # --------------------------------------------------------------------------
 
 with st.sidebar:
@@ -128,34 +233,6 @@ with st.sidebar:
         "Every number comes from a structured XBRL fact table. "
         "<b>The language model never performs arithmetic.</b></div>",
         unsafe_allow_html=True,
-    )
-
-    st.markdown("### Pipeline")
-    st.graphviz_chart(
-        """
-        digraph G {
-            rankdir=TB; bgcolor="transparent";
-            node [shape=box style="rounded,filled" fillcolor="#eef2ff" color="#4f7cff" fontsize=11 fontname="Helvetica"];
-            edge [color="#8aa0d6" fontsize=9 fontname="Helvetica"];
-
-            scope [label="Scope\\n(no LLM)"];
-            planner [label="Planner\\n(LLM)"];
-            router [label="Router\\n(deterministic)"];
-            numeric [label="Resolver + Calculator\\n+ Sandbox\\n(no LLM)"];
-            retrieval [label="Hybrid Retrieval\\n+ Rerank"];
-            writer [label="Writer\\n(LLM, narrative only)"];
-            verifier [label="Verifier\\n(re-derives every figure)"];
-            response [label="Response" shape=ellipse fillcolor="#dcfce7" color="#166534"];
-
-            scope -> planner -> router;
-            router -> numeric [label="numeric step"];
-            router -> retrieval [label="narrative step"];
-            retrieval -> writer;
-            numeric -> verifier;
-            writer -> verifier;
-            verifier -> response;
-        }
-        """
     )
 
     st.markdown("### Corpus status")
@@ -206,7 +283,8 @@ with tab_ask:
     st.markdown(
         "Ask a question about the watchlist's 10-K filings. Numeric answers always cite a "
         "`fact_id` traceable to `xbrl_facts`; narrative answers cite a filing section. "
-        "An unrecognised company returns a clarifying question rather than a guess."
+        "An unrecognised company returns a clarifying question rather than a guess. "
+        "**Watch the pipeline above light up live as your question runs.**"
     )
 
     cols = st.columns(len(EXAMPLE_QUESTIONS))
@@ -220,11 +298,36 @@ with tab_ask:
     ask_clicked = st.button("Ask", type="primary", disabled=not question)
 
     if ask_clicked:
-        with st.spinner("Running the agent graph..."):
-            thread_id = f"ui-{uuid.uuid4().hex[:8]}"
-            result = graph.invoke(
-                {"question": question}, config={"configurable": {"thread_id": thread_id}}
+        thread_id = f"ui-{uuid.uuid4().hex[:8]}"
+        completed: list[str] = []
+        result: dict = {}
+        plan_steps_seen: list[dict] | None = None
+
+        pipeline_placeholder.markdown(render_pipeline([], None), unsafe_allow_html=True)
+
+        for update in graph.stream({"question": question}, config={"configurable": {"thread_id": thread_id}}):
+            node_name = next(iter(update))
+            node_state = update[node_name]
+            result.update(node_state)
+            completed.append(node_name)
+            if node_name == "planner":
+                plan_steps_seen = node_state.get("plan_steps")
+
+            status_placeholder.markdown(
+                f'<div class="pipeline-status">Running: {node_name.replace("_", " ").title()}&hellip;</div>',
+                unsafe_allow_html=True,
             )
+            pipeline_placeholder.markdown(
+                render_pipeline(completed, node_name, plan_steps_seen), unsafe_allow_html=True
+            )
+
+        if "verify" in completed:
+            completed.append("response")
+        pipeline_placeholder.markdown(render_pipeline(completed, None, plan_steps_seen), unsafe_allow_html=True)
+        status_placeholder.empty()
+
+        st.session_state["completed_stages"] = completed
+        st.session_state["plan_steps_for_diagram"] = plan_steps_seen
         st.session_state["last_result"] = result
         st.session_state["last_question"] = question
 
@@ -248,11 +351,13 @@ with tab_ask:
             )
             st.markdown(
                 f'<span class="badge {badge_class}">{route.upper()} PATH</span> '
-                f'<span style="color:#888;font-size:0.85rem;">{route_note}</span>',
+                f'<span style="color:#4A7FA7;font-size:0.85rem;">{route_note}</span>',
                 unsafe_allow_html=True,
             )
-            st.markdown("#### Answer")
-            st.markdown(result.get("final_answer", "_(no answer produced)_"))
+            st.markdown(
+                f'<div class="answer-card">{result.get("final_answer", "<i>(no answer produced)</i>")}</div>',
+                unsafe_allow_html=True,
+            )
 
 with tab_trace:
     st.markdown(
