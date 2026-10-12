@@ -12,6 +12,10 @@ COPY eval ./eval
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
     && pip install --no-cache-dir -e ".[retrieval,agents,ui]"
 
+# After the install, not before: a runtime-only config file, changing it
+# must never invalidate the expensive torch/extras layer above.
+COPY .streamlit ./.streamlit
+
 EXPOSE 8080
 
 CMD ["streamlit", "run", "apps/ui/app.py", \
